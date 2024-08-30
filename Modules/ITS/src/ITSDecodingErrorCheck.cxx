@@ -42,16 +42,7 @@ Quality ITSDecodingErrorCheck::check(std::map<std::string, std::shared_ptr<Monit
     ILOG(Error, Support) << "Incorrect vector with DecodingError limits, check .json" << ENDM;
     doFlatCheck = true;
   }
-  std::vector<float> vDecErrorLimitsRatio = convertToArray<float>(o2::quality_control_modules::common::getFromConfig<string>(mCustomParameters, "DecLinkErrorLimitsRatio", ""));
-  if (vDecErrorLimitsRatio.size() != o2::itsmft::GBTLinkDecodingStat::NErrorsDefined) {
-    ILOG(Error, Support) << "Incorrect vector with DecodingError limits Ratio, check .json" << ENDM;
-    doFlatCheck = true;
-  }
-  std::vector<int> vDecErrorType = convertToArray<int>(o2::quality_control_modules::common::getFromConfig<string>(mCustomParameters, "DecLinkErrorType", ""));
-  if (vDecErrorType.size() != o2::itsmft::GBTLinkDecodingStat::NErrorsDefined) {
-    ILOG(Error, Support) << "Incorrect vector with DecodingError Type, check .json" << ENDM;
-    doFlatCheck = true;
-  }
+  
 
   Quality result = Quality::Null;
   for (auto& [moName, mo] : *moMap) {
@@ -69,49 +60,43 @@ Quality ITSDecodingErrorCheck::check(std::map<std::string, std::shared_ptr<Monit
 
     if (((string)mo->getName()).find("General/LinkErrorPlots") != std::string::npos) {
       result = Quality::Good;
+
       auto* h = dynamic_cast<TH1D*>(mo->getObject());
       if (h == nullptr) {
         ILOG(Error, Support) << "could not cast LinkErrorPlots to TH1D*" << ENDM;
         continue;
       }
+  
+      if (nCycleLink == 0){
+	LinkErrorBuffer = h->Clone();
+      }
 
+     
+      TH1D* LinkErrorDiff = h->Add(LinkErrorBuffer, -1);
+      
+   
       if (doFlatCheck) {
-        if (h->GetMaximum() > 200)
-          result.set(Quality::Bad);
-
+	for (int iBin = 1; iBin <= h->GetNbinsX()-1; iBin++)
+	  if (h->GetBinContent(i) > 200){
+	    result.set(Quality::Bad);
+	    break;
+	  }
       } else {
         for (int iBin = 1; iBin <= h->GetNbinsX(); iBin++) {
 
           if (vDecErrorLimits[iBin - 1] < 0)
             continue; // skipping bin
 
-          if (vDecErrorType[iBin - 1] == 1 && TIME != 0) {
-            if (vDecErrorLimitsRatio[iBin - 1] <= h->GetBinContent(iBin) / TIME) {
+            if (vDecErrorLimits[iBin - 1] <= LinkErrorDiffh->GetBinContent(iBin)) {
               vListErrorIdBad.push_back(iBin - 1);
               result.set(Quality::Bad);
               result.addFlag(o2::quality_control::FlagTypeFactory::Unknown(), Form("BAD: ID = %d, %s", iBin - 1, std::string(statistics.ErrNames[iBin - 1]).c_str()));
-            } else if (vDecErrorLimitsRatio[iBin - 1] / 2 < h->GetBinContent(iBin) / TIME) {
-              vListErrorIdMedium.push_back(iBin - 1);
-              if (result != Quality::Bad) {
-                result.addFlag(o2::quality_control::FlagTypeFactory::Unknown(), Form("Medium: ID = %d, %s", iBin - 1, std::string(statistics.ErrNames[iBin - 1]).c_str()));
-                result.set(Quality::Medium);
-              }
-            }
-          } else { // normal check, as we have in the code now
-            if (vDecErrorLimits[iBin - 1] <= h->GetBinContent(iBin)) {
-              vListErrorIdBad.push_back(iBin - 1);
-              result.set(Quality::Bad);
-              result.addFlag(o2::quality_control::FlagTypeFactory::Unknown(), Form("BAD: ID = %d, %s", iBin - 1, std::string(statistics.ErrNames[iBin - 1]).c_str()));
-            } else if (vDecErrorLimits[iBin - 1] / 2 < h->GetBinContent(iBin)) {
-              vListErrorIdMedium.push_back(iBin - 1);
-              if (result != Quality::Bad) {
-                result.addFlag(o2::quality_control::FlagTypeFactory::Unknown(), Form("Medium: ID = %d, %s", iBin - 1, std::string(statistics.ErrNames[iBin - 1]).c_str()));
-                result.set(Quality::Medium);
-              }
-            }
-          }
+            } 
         }
       }
+
+      nCycleLink ++;
+      LinkErrorBuffer = h->Clone();
     }
   }
   return result;
@@ -160,21 +145,6 @@ void ITSDecodingErrorCheck::beautify(std::shared_ptr<MonitorObject> mo, Quality 
           h->GetListOfFunctions()->Add(tInfo->Clone());
         }
         textColor = kRed + 2;
-      }
-      if (vListErrorIdMedium.size() > 0) {
-        if (checkResult == Quality::Medium) {
-          status = "Quality::Medium";
-          textColor = kOrange;
-        }
-        for (int id = 0; id < vListErrorIdMedium.size(); id++) {
-          int currentError = vListErrorIdMedium[id];
-          tInfo = std::make_shared<TLatex>(0.12, 0.6 - 0.04 * (id + 1), Form("Medium: ID = %d, %s", currentError, std::string(statistics.ErrNames[currentError]).c_str()));
-          tInfo->SetTextColor(kOrange + 1);
-          tInfo->SetTextSize(0.04);
-          tInfo->SetTextFont(43);
-          tInfo->SetNDC();
-          h->GetListOfFunctions()->Add(tInfo->Clone());
-        }
       }
     }
     tInfo = std::make_shared<TLatex>(0.05, 0.95, Form("#bf{%s}", status.Data()));

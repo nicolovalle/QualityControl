@@ -42,12 +42,14 @@ class ITSDecodingErrorCheck : public o2::quality_control::checker::CheckInterfac
   // Override interface
   Quality check(std::map<std::string, std::shared_ptr<MonitorObject>>* moMap) override;
   void beautify(std::shared_ptr<MonitorObject> mo, Quality checkResult = Quality::Null) override;
-  std::vector<int> vListErrorIdBad, vListErrorIdMedium;
+  std::vector<int> vListErrorIdBad;
+  TH1D* LinkErrorBuffer = nullptr;
   bool doFlatCheck = false;
   o2::itsmft::GBTLinkDecodingStat statistics;
 
  private:
   int nCycle = 0;
+  int nCycleLink = 0;
   // set timer
   std::chrono::time_point<std::chrono::high_resolution_clock> start;
   std::chrono::time_point<std::chrono::high_resolution_clock> end;
